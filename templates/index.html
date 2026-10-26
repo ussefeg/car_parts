@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة مخزن قطع الغيار - الاستيراد</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">⚙️ نظام إدارة حاوية قطع الغيار</span>
+            <span class="text-white">المستخدمون: ussef | omda | migo</span>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- لوحة الإحصائيات -->
+        <div class="row text-center mb-4">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white p-3">
+                    <h5>إجمالي القطع</h5>
+                    <h3>{{ stats_total }}</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white p-3">
+                    <h5>المتاح بالمخزن</h5>
+                    <h3>{{ stats_available }}</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark p-3">
+                    <h5>المحجوز</h5>
+                    <h3>{{ stats_reserved }}</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-danger text-white p-3">
+                    <h5>المباع</h5>
+                    <h3>{{ stats_sold }} ({{ total_sales_actual }} ج.م)</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- زر إضافة قطعة وفلتر البحث -->
+        <div class="card p-3 mb-4 shadow-sm">
+            <form method="GET" action="/" class="row g-3">
+                <div class="col-md-6">
+                    <input type="text" name="search" class="form-control" placeholder="ابحث بالموديل، النوع، أو اللون..." value="{{ request.args.get('search', '') }}">
+                </div>
+                <div class="col-md-4">
+                    <select name="status" class="form-select">
+                        <option value="">كل الحالات</option>
+                        <option value="متوفر">متوفر</option>
+                        <option value="محجوز">محجوز</option>
+                        <option value="مباع">مباع</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-dark w-100">بحث</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4>قائمة القطع بالمخزن</h4>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ إضافة قطعة جديدة</button>
+        </div>
+
+        <!-- جدول عرض القطع -->
+        <div class="card shadow-sm">
+            <div class="card-body table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>الصورة</th>
+                            <th>الموديل</th>
+                            <th>النوع</th>
+                            <th>اللون</th>
+                            <th>السعر المستهدف</th>
+                            <th>الحالة</th>
+                            <th>بواسطة / تفاصيل</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for part in parts %}
+                        <tr>
+                            <td>
+                                {% if part.image_filename %}
+                                <img src="{{ url_for('static', filename='uploads/' + part.image_filename) }}" width="50" height="50" class="rounded object-fit-cover">
+                                {% else %}
+                                <span class="text-muted">بدون</span>
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ part.model }}</strong></td>
+                            <td>{{ part.part_type }}</td>
+                            <td>{{ part.color }}</td>
+                            <td>{{ part.target_price }} ج.م</td>
+                            <td>
+                                <span class="badge {% if part.status == 'متوفر' %}bg-success{% elif part.status == 'محجوز' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                    {{ part.status }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if part.status == 'مباع' %}
+                                <small>مباع بـ: {{ part.sold_price }} ج.م<br>بواسطة: {{ part.seller_name }}</small>
+                                {% elif part.status == 'محجوز' %}
+                                <small>حجز: {{ part.buyer_phone }}</small>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    {% if part.status != 'مباع' %}
+                                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sellModal{{ part.id }}">بيع</button>
+                                    <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#reserveModal{{ part.id }}">حجز</button>
+                                    {% else %}
+                                    <form action="{{ url_for('update_part', id=part.id) }}" method="POST" class="d-inline">
+                                        <input type="hidden" name="action" value="available">
+                                        <button type="submit" class="btn btn-outline-success btn-sm">إعادة للمخزن</button>
+                                    </form>
+                                    {% endif %}
+                                    <form action="{{ url_for('update_part', id=part.id) }}" method="POST" class="d-inline" onsubmit="return confirm('متأكد من الحذف؟');">
+                                        <input type="hidden" name="action" value="delete">
+                                        <button type="submit" class="btn btn-danger btn-sm">حذف</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Modal البيع -->
+                        <div class="modal fade" id="sellModal{{ part.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form action="{{ url_for('update_part', id=part.id) }}" method="POST">
+                                        <input type="hidden" name="action" value="sell">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">تسجيل بيع قطعة: {{ part.part_type }} ({{ part.model }})</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="mb-3">
+                                                <label class="form-label">سعر البيع الفعلي (ج.م):</label>
+                                                <input type="number" step="any" name="sold_price" class="form-control" value="{{ part.target_price }}" required>
+                                                <small class="text-muted">الحد الأدنى المقبول: {{ part.min_price }} ج.م</small>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">اسم البائع:</label>
+                                                <select name="seller_name" class="form-select">
+                                                    <option value="يوسف">يوسف</option>
+                                                    <option value="الوالد">الوالد</option>
+                                                    <option value="العم">العم</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="submit" class="btn btn-success">تأكيد البيع</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal الحجز -->
+                        <div class="modal fade" id="reserveModal{{ part.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form action="{{ url_for('update_part', id=part.id) }}" method="POST">
+                                        <input type="hidden" name="action" value="reserve">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">حجز القطعة</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="mb-3">
+                                                <label class="form-label">رقم تليفون أو اسم الزبون:</label>
+                                                <input type="text" name="buyer_phone" class="form-control" required>
+                                            </div>
+                                            <input type="hidden" name="seller_name" value="يوسف">
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="submit" class="btn btn-warning">تأكيد الحجز</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal إضافة قطعة -->
+    <div class="modal fade" id="addModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="/add" method="POST" enctype="multipart/form-data">
+                    <div class="modal-header">
+                        <h5 class="modal-title">إضافة قطعة جديدة للحاوية</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">الموديل (مثل: CN7 فيس ليفت، MD، Kia...):</label>
+                            <input type="text" name="model" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">نوع القطعة (اكصدام، كبوت، باب، صدر...):</label>
+                            <input type="text" name="part_type" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">اللون:</label>
+                            <input type="text" name="color" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">السعر المستهدف للعرض (ج.م):</label>
+                            <input type="number" step="any" name="target_price" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">الحد الأدنى المقبول للفصال (ج.م):</label>
+                            <input type="number" step="any" name="min_price" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">صورة القطعة (اختياري):</label>
+                            <input type="file" name="image" class="form-control">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-success">حفظ وإضافة</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
